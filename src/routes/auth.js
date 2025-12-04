@@ -12,15 +12,95 @@ const signToken = (user) => {
   return jwt.sign(payload, secret, { expiresIn: "7d" });
 };
 
+// Password validation helper
+const validatePassword = (password) => {
+  const errors = [];
+  if (password.length < 8) {
+    errors.push("Password must be at least 8 characters");
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push("Password must contain at least one lowercase letter");
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push("Password must contain at least one uppercase letter");
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push("Password must contain at least one number");
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push("Password must contain at least one special character");
+  }
+  return errors;
+};
+
+// Name validation helper
+const validateName = (name) => {
+  if (!name || !name.trim()) {
+    return "Citizen name is required";
+  }
+  if (name.trim().length < 3) {
+    return "Citizen name must be at least 3 characters";
+  }
+  if (name.trim().length > 50) {
+    return "Citizen name must be less than 50 characters";
+  }
+  if (!/^[a-zA-Z\s'-]+$/.test(name.trim())) {
+    return "Citizen name can only contain letters, spaces, hyphens, and apostrophes";
+  }
+  return null;
+};
+
+// Email validation helper
+const validateEmail = (email) => {
+  if (!email || !email.trim()) {
+    return "Email is required";
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return "Please enter a valid email address";
+  }
+  return null;
+};
+
 router.post("/signup", async (req, res) => {
   try {
     const { email, password, citizenName, citizenship } = req.body;
-    if (!email || !password || !citizenName || !citizenship)
+    
+    // Check required fields
+    if (!email || !password || !citizenName || !citizenship) {
       return res.status(400).json({ error: "email, password, citizenName, citizenship required" });
-    const exists = await User.findOne({ email });
+    }
+
+    // Validate email
+    const emailError = validateEmail(email);
+    if (emailError) {
+      return res.status(400).json({ error: emailError });
+    }
+
+    // Validate name
+    const nameError = validateName(citizenName);
+    if (nameError) {
+      return res.status(400).json({ error: nameError });
+    }
+
+    // Validate password
+    const passwordErrors = validatePassword(password);
+    if (passwordErrors.length > 0) {
+      return res.status(400).json({ error: passwordErrors[0] });
+    }
+
+    // Check if user exists
+    const exists = await User.findOne({ email: email.toLowerCase().trim() });
     if (exists) return res.status(409).json({ error: "email already registered" });
+
+    // Hash password and create user
     const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ email, password: hash, provider: "local", citizenName, citizenship });
+    const user = await User.create({ 
+      email: email.toLowerCase().trim(), 
+      password: hash, 
+      provider: "local", 
+      citizenName: citizenName.trim(), 
+      citizenship: citizenship.trim() 
+    });
     const token = signToken(user);
     res.status(201).json({ token, user: { id: user.id, email: user.email, role: user.role, provider: user.provider, citizenName: user.citizenName, citizenship: user.citizenship } });
   } catch (e) {
